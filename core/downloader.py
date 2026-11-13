@@ -178,7 +178,8 @@ def _clean_title(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip(" -–—")
 
 
-def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[float]) -> Optional[dict]:
+def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[float]) -> list[dict]:
+    """Кандидаты на SoundCloud, лучшие первыми (пустой список — ничего похожего)."""
     artist = (artist or "").removesuffix(" - Topic").removesuffix("VEVO").strip()
     title = _clean_title(title or "")
     # «Исполнитель - Песня» в названии уже есть — имя канала не добавляем
@@ -187,7 +188,7 @@ def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[flo
     else:
         query = f"{artist} {title}".strip()
     if not query:
-        return None
+        return []
     candidates = []
     # поиск SoundCloud иногда отвечает 500 — пробуем ещё раз и запрос без дефиса
     for q in (query, query, re.sub(r"\s+[-–—|]\s+", " ", query)):
@@ -197,7 +198,7 @@ def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[flo
         except Exception:  # noqa: BLE001
             time.sleep(1)
     if not candidates:
-        return None
+        return []
 
     bad_words = ("remix", "cover", "mashup", "sped up", "slowed", "nightcore", "karaoke",
                  "instrumental", "live", "edit", "кавер", "ремикс", "минус", "8d", "bass boosted")
@@ -218,8 +219,8 @@ def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[flo
             s += 6 if diff <= 5 else 3 if diff <= 15 else -6 if diff > 40 else 0
         return s
 
-    best = max(candidates, key=score)
-    return best if score(best) > -5 else None
+    ranked = sorted(candidates, key=score, reverse=True)
+    return [c for c in ranked if score(c) > -5]
 
 
 def download_smart(
@@ -245,12 +246,15 @@ def download_smart(
                 meta.update(youtube_meta(url))
             except Exception:  # noqa: BLE001
                 raise e from None
-        alt = find_on_soundcloud(meta.get("title"), meta.get("uploader"), meta.get("duration"))
-        if not alt:
-            raise
-        info = download(alt["url"], "audio", quality, out_dir, progress)
-        info["fallback"] = "soundcloud"
-        return info
+        # часть треков на SoundCloud под DRM или только для подписчиков — пробуем следующие
+        for alt in find_on_soundcloud(meta.get("title"), meta.get("uploader"), meta.get("duration"))[:4]:
+            try:
+                info = download(alt["url"], "audio", quality, out_dir, progress)
+            except Exception:  # noqa: BLE001
+                continue
+            info["fallback"] = "soundcloud"
+            return info
+        raise RuntimeError("YouTube не даёт скачать с сервера, а на SoundCloud этот трек не нашёлся") from e
 
 
 SOURCES = {
@@ -366,8 +370,10 @@ def friendly_error(e: Exception) -> str:
     low = msg.lower()
     if "unsupported url" in low:
         return "Этот сайт не поддерживается"
+    if "не нашёлся" in low:
+        return msg
     if "not a bot" in low:
-        return "YouTube не даёт скачать с сервера (защита от ботов). MP3 попробую найти на SoundCloud"
+        return "YouTube не даёт скачать видео с сервера (защита от ботов). MP3 по этой ссылке скачать можно"
     if "logged-in" in low or "login" in low or "cookies" in low or "sign in" in low:
         return "Сайт требует входа в аккаунт. Добавь cookies.txt (см. README)"
     if "private" in low:
