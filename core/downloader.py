@@ -149,6 +149,110 @@ def download(
     }
 
 
+def is_youtube(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    h = (urlparse(url).hostname or "").lower()
+    return h == "youtu.be" or h == "youtube.com" or h.endswith(".youtube.com")
+
+
+def is_blocked_error(e: Exception) -> bool:
+    low = str(e).lower()
+    return any(s in low for s in ("not a bot", "sign in", "login", "cookies", "429", "too many requests"))
+
+
+def youtube_meta(url: str) -> dict:
+    """Название и автор видео через oEmbed — работает даже когда YouTube блокирует скачивание."""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    api = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(url, safe="")
+    with urllib.request.urlopen(api, timeout=15) as r:
+        data = json.load(r)
+    return {"title": data.get("title"), "uploader": data.get("author_name")}
+
+
+def _clean_title(s: str) -> str:
+    s = re.sub(r"[\(\[][^)\]]*(official|video|audio|lyrics?|клип|текст|hd|4k|mv)[^)\]]*[\)\]]", "", s, flags=re.I)
+    return re.sub(r"\s+", " ", s).strip(" -–—")
+
+
+def find_on_soundcloud(title: str, artist: Optional[str], duration: Optional[float]) -> Optional[dict]:
+    artist = (artist or "").removesuffix(" - Topic").removesuffix("VEVO").strip()
+    title = _clean_title(title or "")
+    # «Исполнитель - Песня» в названии уже есть — имя канала не добавляем
+    if " - " in title or (artist and artist.lower() in title.lower()):
+        query = title
+    else:
+        query = f"{artist} {title}".strip()
+    if not query:
+        return None
+    candidates = []
+    # поиск SoundCloud иногда отвечает 500 — пробуем ещё раз и запрос без дефиса
+    for q in (query, query, re.sub(r"\s+[-–—|]\s+", " ", query)):
+        try:
+            candidates = _search_ytdlp("soundcloud", q, 10)
+            break
+        except Exception:  # noqa: BLE001
+            time.sleep(1)
+    if not candidates:
+        return None
+
+    bad_words = ("remix", "cover", "mashup", "sped up", "slowed", "nightcore", "karaoke",
+                 "instrumental", "live", "edit", "кавер", "ремикс", "минус", "8d", "bass boosted")
+    q_low = query.lower()
+
+    def score(c: dict) -> float:
+        name = f"{c.get('title') or ''} {c.get('uploader') or ''}".lower()
+        s = 0.0
+        s -= sum(20 for w in bad_words if w in name and w not in q_low)
+        if artist and artist.lower() in name:
+            s += 5
+        if title and title.lower() in name:
+            s += 3
+        if " / " in (c.get("title") or ""):  # склейки из нескольких песен
+            s -= 8
+        if duration and c.get("duration"):
+            diff = abs(c["duration"] - duration)
+            s += 6 if diff <= 5 else 3 if diff <= 15 else -6 if diff > 40 else 0
+        return s
+
+    best = max(candidates, key=score)
+    return best if score(best) > -5 else None
+
+
+def download_smart(
+    url: str,
+    mode: str = "video",
+    quality: str = "best",
+    out_dir: Optional[Path] = None,
+    progress: Optional[Callable[[float], None]] = None,
+    hint: Optional[dict] = None,
+) -> dict:
+    """Как download(), но если YouTube не отдаёт аудио (блокирует сервер),
+    находит тот же трек на SoundCloud и скачивает оттуда."""
+    if out_dir is None:
+        _, out_dir = new_job_dir()
+    try:
+        return download(url, mode, quality, out_dir, progress)
+    except Exception as e:
+        if mode != "audio" or not is_youtube(url) or not is_blocked_error(e):
+            raise
+        meta = dict(hint or {})
+        if not meta.get("title"):
+            try:
+                meta.update(youtube_meta(url))
+            except Exception:  # noqa: BLE001
+                raise e from None
+        alt = find_on_soundcloud(meta.get("title"), meta.get("uploader"), meta.get("duration"))
+        if not alt:
+            raise
+        info = download(alt["url"], "audio", quality, out_dir, progress)
+        info["fallback"] = "soundcloud"
+        return info
+
+
 SOURCES = {
     "ytmusic": "YouTube Music",
     "soundcloud": "SoundCloud",
@@ -262,6 +366,8 @@ def friendly_error(e: Exception) -> str:
     low = msg.lower()
     if "unsupported url" in low:
         return "Этот сайт не поддерживается"
+    if "not a bot" in low:
+        return "YouTube не даёт скачать с сервера (защита от ботов). MP3 попробую найти на SoundCloud"
     if "logged-in" in low or "login" in low or "cookies" in low or "sign in" in low:
         return "Сайт требует входа в аккаунт. Добавь cookies.txt (см. README)"
     if "private" in low:

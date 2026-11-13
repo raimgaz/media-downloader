@@ -88,7 +88,7 @@ def _run(job_id: str, out_dir: Path):
         job["progress"] = round(p, 1)
 
     try:
-        info = dl.download(job["url"], job["mode"], job["quality"], out_dir, on_progress)
+        info = dl.download_smart(job["url"], job["mode"], job["quality"], out_dir, on_progress)
         job.update(
             status="done",
             progress=100,
@@ -98,6 +98,7 @@ def _run(job_id: str, out_dir: Path):
             path=str(info["path"]),
         )
     except Exception as e:  # noqa: BLE001
+        log.warning("download failed %s: %s", job["url"], e)
         job.update(status="error", error=dl.friendly_error(e))
 
 

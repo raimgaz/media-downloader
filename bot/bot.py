@@ -328,7 +328,7 @@ async def process(chat_msg: Message, url: str, mode: str, prefix: str = "", hint
     try:
         async with download_slots:
             await safe_edit(status, f"{prefix}⬇️ {name}\n<code>{progress_bar(0)}</code> начинаю")
-            info = await asyncio.to_thread(dl.download, url, mode, "720", out_dir, on_progress)
+            info = await asyncio.to_thread(dl.download_smart, url, mode, "720", out_dir, on_progress, hint)
     except Exception as e:  # noqa: BLE001
         log.warning("download failed %s: %s", url, e)
         shutil.rmtree(out_dir, ignore_errors=True)
@@ -368,6 +368,8 @@ async def process(chat_msg: Message, url: str, mode: str, prefix: str = "", hint
             await chat_msg.bot.send_chat_action(chat_msg.chat.id, ChatAction.UPLOAD_VOICE)
             album = (hint or {}).get("album")
             meta = " · ".join(x for x in [esc(artist), esc(album), dl.format_duration(duration)] if x)
+            if info.get("fallback"):
+                meta += "  ·  ☁️ SoundCloud"
             await chat_msg.answer_audio(
                 file,
                 title=title[:64],
