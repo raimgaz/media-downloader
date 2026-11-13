@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grab. — скачать видео и музыку</title>
+<meta name="description" content="Скачивание видео и аудио из YouTube, TikTok, Instagram, VK, X и других соцсетей. Несколько ссылок сразу и поиск песен по названию.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23111'/><path d='M16 8v12m0 0-5-5m5 5 5-5M10 24h12' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/">grab.</a>
+  <a class="tg" id="tgLink" href="https://t.me/" target="_blank" rel="noopener">Telegram-бот</a>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Скачивай что угодно</h1>
+    <p class="sub">YouTube, TikTok, Instagram, VK, X, Reddit, SoundCloud и ещё 1000+ сайтов</p>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-tab="video">Видео</button>
+    <button class="tab" role="tab" data-tab="audio">Аудио</button>
+    <button class="tab" role="tab" data-tab="search">Поиск песни</button>
+  </nav>
+
+  <section id="panel-links" class="panel">
+    <textarea id="links" rows="5" spellcheck="false" placeholder="Вставь ссылки, каждую с новой строки&#10;https://youtu.be/...&#10;https://www.tiktok.com/@user/video/..."></textarea>
+    <div class="row">
+      <label class="quality" id="qualityWrap">
+        <span>Качество</span>
+        <select id="quality">
+          <option value="best">Лучшее</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+      </label>
+      <span class="hint" id="audioHint" hidden>Аудио сохранится в mp3</span>
+      <button class="btn primary" id="go">Скачать</button>
+    </div>
+    <p class="error" id="linksError" hidden></p>
+  </section>
+
+  <section id="panel-search" class="panel" hidden>
+    <form class="search" id="searchForm">
+      <input id="q" type="search" autocomplete="off" placeholder="Исполнитель — название трека">
+      <button class="btn primary" type="submit">Найти</button>
+    </form>
+    <div class="sources" id="sources">
+      <button class="chip active" data-source="all">Везде</button>
+      <button class="chip" data-source="ytmusic">YouTube Music</button>
+      <button class="chip" data-source="soundcloud">SoundCloud</button>
+      <button class="chip" data-source="youtube">YouTube</button>
+    </div>
+    <p class="error" id="searchError" hidden></p>
+    <ul class="results" id="results"></ul>
+  </section>
+
+  <section class="jobs-wrap" id="jobsWrap" hidden>
+    <div class="jobs-head">
+      <h2>Загрузки</h2>
+      <button class="btn ghost" id="saveAll" hidden>Сохранить все</button>
+    </div>
+    <ul class="jobs" id="jobs"></ul>
+  </section>
+</main>
+
+<footer class="foot">Файлы хранятся час, потом удаляются. Скачивай только то, на что у тебя есть права.</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
